@@ -131,6 +131,7 @@ const PhotoOrnaments = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 
   const borderGeometry = useMemo(() => new THREE.PlaneGeometry(1.2, 1.5), []);
   const photoGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+  
 
   const data = useMemo(() => {
     return new Array(count).fill(0).map((_, i) => {
@@ -510,14 +511,142 @@ export default function GrandTreeApp() {
   const [aiStatus, setAiStatus] = useState("INITIALIZING...");
   const [debugMode, setDebugMode] = useState(false);
 
+  // 1. Thêm State và Ref cho nhạc
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  // =======================================================
+  // 👇 BẮT ĐẦU DÁN ĐOẠN LOGIC VÀO KHOẢNG TRỐNG NÀY 👇
+  // =======================================================
+
+  // --- SỬA LẠI ĐOẠN LOGIC NÀY (Dùng slice để fix lỗi lặp chữ) ---
+  const [typingText, setTypingText] = useState("");
+  const fullMessage = "Tin nhắn này 0% chất béo, nhưng 100% ngọt ngào. Giáng sinh vui vẻ nha!"; 
+  
+  useEffect(() => {
+    let index = 0;
+    const intervalId = setInterval(() => {
+      index++; // Tăng vị trí cắt
+      // Thay vì cộng dồn (prev + char), ta cắt từ chuỗi gốc ra -> Đảm bảo không bị lặp
+      setTypingText(fullMessage.slice(0, index)); 
+      
+      if (index >= fullMessage.length) {
+        clearInterval(intervalId);
+      }
+    }, 100); // Tốc độ gõ
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // 2. Hàm xử lý bật/tắt nhạc
+  const toggleMusic = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        // Cố gắng phát nhạc, nếu trình duyệt chặn thì log ra
+        audioRef.current.play().catch(e => console.log("Cần tương tác để phát nhạc:", e));
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  // 3. Tự động thử phát nhạc lần đầu (Có thể bị trình duyệt chặn, nên cần nút bấm thủ công)
+  useEffect(() => {
+    const tryPlay = async () => {
+        if(audioRef.current) {
+            try {
+                await audioRef.current.play();
+                setIsPlaying(true);
+            } catch (err) {
+                console.log("Auto-play blocked, waiting for user interaction");
+            }
+        }
+    }
+    // Thử phát khi mới vào
+    tryPlay();
+    
+    // Thêm sự kiện click chuột lần đầu vào trang để kích hoạt nhạc
+    const handleFirstClick = () => {
+        if (audioRef.current && audioRef.current.paused) {
+            audioRef.current.play();
+            setIsPlaying(true);
+        }
+        window.removeEventListener('click', handleFirstClick);
+    };
+    window.addEventListener('click', handleFirstClick);
+    
+    return () => window.removeEventListener('click', handleFirstClick);
+  }, []);
+
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
+      
+      {/* Thẻ Audio ẩn */}
+      <audio ref={audioRef} src="/bgm.mp3" loop />
+
       <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
         <Canvas dpr={[1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
             <Experience sceneState={sceneState} rotationSpeed={rotationSpeed} />
         </Canvas>
       </div>
       <GestureController onGesture={setSceneState} onMove={setRotationSpeed} onStatus={setAiStatus} debugMode={debugMode} />
+      {/* --- UI - LỜI CHÚC (TYPEWRITER STYLE) --- */}
+      <div style={{
+        position: 'absolute',
+        top: '15%',
+        width: '100%',
+        textAlign: 'center',
+        zIndex: 5,
+        pointerEvents: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textShadow: '0 0 20px rgba(0,0,0,0.8)' // Đổ bóng đen để chữ nổi bật trên nền cây
+      }}>
+        {/* Dòng tiêu đề: Merry Christmas (Hiệu ứng hiện từ từ) */}
+        <h1 style={{
+          fontFamily: '"Times New Roman", serif',
+          fontSize: '3rem',
+          color: '#FFD700', // Màu vàng kim
+          margin: '0 0 15px 0',
+          fontWeight: 'bold',
+          letterSpacing: '5px',
+          textTransform: 'uppercase',
+          animation: 'fadeIn 3s ease-in-out' // Hiệu ứng hiện dần trong 3s
+        }}>
+          Merry Christmas
+        </h1>
+
+        {/* Dòng lời chúc: Hiệu ứng gõ máy */}
+        <div style={{
+          backgroundColor: 'rgba(0, 0, 0, 0.4)', // Nền đen mờ nhẹ cho dễ đọc
+          padding: '10px 20px',
+          borderRadius: '15px',
+          backdropFilter: 'blur(2px)',
+          border: '1px solid rgba(255, 215, 0, 0.3)'
+        }}>
+          <p style={{
+            fontFamily: 'monospace, sans-serif', // Font kiểu đánh máy
+            color: '#FFFFFF',
+            fontSize: '1.2rem',
+            letterSpacing: '1px',
+            lineHeight: '1.5',
+            margin: 0,
+            display: 'inline-block',
+            fontWeight: 'bold'
+          }}>
+            {typingText}
+            <span style={{ animation: 'blink 1s infinite' }}>|</span> {/* Con trỏ nhấp nháy */}
+          </p>
+        </div>
+
+        {/* Thêm style Animation trực tiếp vào đây để không cần sửa file CSS */}
+        <style>{`
+          @keyframes blink { 0% { opacity: 0 } 50% { opacity: 1 } 100% { opacity: 0 } }
+          @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        `}</style>
+      </div>
 
       {/* UI - Stats */}
       <div style={{ position: 'absolute', bottom: '30px', left: '40px', color: '#888', zIndex: 10, fontFamily: 'sans-serif', userSelect: 'none' }}>
@@ -536,13 +665,39 @@ export default function GrandTreeApp() {
       </div>
 
       {/* UI - Buttons */}
-      <div style={{ position: 'absolute', bottom: '30px', right: '40px', zIndex: 10, display: 'flex', gap: '10px' }}>
-        <button onClick={() => setDebugMode(!debugMode)} style={{ padding: '12px 15px', backgroundColor: debugMode ? '#FFD700' : 'rgba(0,0,0,0.5)', border: '1px solid #FFD700', color: debugMode ? '#000' : '#FFD700', fontFamily: 'sans-serif', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-           {debugMode ? 'HIDE DEBUG' : '🛠 DEBUG'}
+      <div style={{ position: 'absolute', bottom: '30px', right: '40px', zIndex: 10, display: 'flex', gap: '10px', flexDirection: 'column', alignItems: 'flex-end' }}>
+        
+        {/* Nút Nhạc Mới Thêm */}
+        <button 
+            onClick={toggleMusic} 
+            style={{ 
+                padding: '10px 20px', 
+                marginBottom: '5px',
+                backgroundColor: isPlaying ? '#FFD700' : 'rgba(255,255,255,0.1)', 
+                border: '1px solid #FFD700', 
+                color: isPlaying ? '#000' : '#FFD700', 
+                fontFamily: 'sans-serif', 
+                fontSize: '12px', 
+                fontWeight: 'bold', 
+                cursor: 'pointer', 
+                backdropFilter: 'blur(4px)',
+                borderRadius: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+            }}
+        >
+           {isPlaying ? '🔊 MUSIC ON' : '🔇 MUSIC OFF'}
         </button>
-        <button onClick={() => setSceneState(s => s === 'CHAOS' ? 'FORMED' : 'CHAOS')} style={{ padding: '12px 30px', backgroundColor: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255, 215, 0, 0.5)', color: '#FFD700', fontFamily: 'serif', fontSize: '14px', fontWeight: 'bold', letterSpacing: '3px', textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-           {sceneState === 'CHAOS' ? 'Assemble Tree' : 'Disperse'}
-        </button>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => setDebugMode(!debugMode)} style={{ padding: '12px 15px', backgroundColor: debugMode ? '#FFD700' : 'rgba(0,0,0,0.5)', border: '1px solid #FFD700', color: debugMode ? '#000' : '#FFD700', fontFamily: 'sans-serif', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+               {debugMode ? 'HIDE DEBUG' : '🛠 DEBUG'}
+            </button>
+            <button onClick={() => setSceneState(s => s === 'CHAOS' ? 'FORMED' : 'CHAOS')} style={{ padding: '12px 30px', backgroundColor: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255, 215, 0, 0.5)', color: '#FFD700', fontFamily: 'serif', fontSize: '14px', fontWeight: 'bold', letterSpacing: '3px', textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+               {sceneState === 'CHAOS' ? 'Assemble Tree' : 'Disperse'}
+            </button>
+        </div>
       </div>
 
       {/* UI - AI Status */}
